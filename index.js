@@ -97,7 +97,7 @@ prompt.get(schema, (err, result) => {
   p7.sign();
   var pem = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
   // TODO this signature is too large for QRCode encoding. 
-  // Find a way to shrink it (and still be able to be verify)
+  // Find a way to shrink it (and still be able to verify)
   bailout += '-';
   bailout += pem
 
