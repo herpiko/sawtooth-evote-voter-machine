@@ -1,0 +1,15 @@
+{
+  "name": "sawtooth-evote-voter-machine",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Herpiko Dwi Aguno <herpiko@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "node-forge": "^0.7.5",
+    "prompt": "^1.0.0"
+  }
+}
