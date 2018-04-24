@@ -3,6 +3,7 @@ const prompt = require('prompt');
 const {createHash} = require('crypto')
 const forge = require('node-forge');
 const pki = forge.pki;
+const base64 = require('js-base64').Base64;
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const candidates = JSON.parse(fs.readFileSync('candidates.json', 'utf8'));
@@ -95,17 +96,28 @@ prompt.get(schema, (err, result) => {
   });
   p7.sign();
   var pem = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
-
+  // TODO this signature is too large for QRCode encoding. 
+  // Find a way to shrink it (and still be able to be verify)
   bailout += '-';
   bailout += pem
 
-  // TODO submit to DPT ledger
+  var txName = base64.encode(voterCert.subject.getField('CN').value);
+  var txValue;
+  p7 = forge.pkcs7.createEnvelopedData();
+  p7.addRecipient(voterCert);
+  p7.content = forge.util.createBuffer(vote);
+  p7.encrypt();
+  txValue = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+  var tx = { name : txName, value : txValue };
+  // TODO submit to DPT ledger. DPT tp is not ready yet.
+  console.log(tx);
 
-  fs.writeFile('bailouts/bailout-' + bailout.substr(-16) + '.txt', bailout + '\n', function(err){
+  let path = 'bailouts/bailout-' + bailout.replace(/\-/g,'').replace(/\+/g,'').replace(/\//g,'').substr(-16) + '.txt';
+  fs.writeFile(path, bailout + '\n', function(err){
     if (err) {
       console.log('Failed to print the bailout paper : ' + err);
       process.exit(1);
     }
-    console.log('\nThe bailout paper has been printed out. Please take it to the vote box.');
+    console.log('\nThe bailout paper has been printed out (' + path + '). Please take it to the vote box.');
   });
 });
