@@ -1,3 +1,6 @@
 [submodule "certs"]
 	path = certs
 	url = git@github.com:herpiko/sawtooth-evote-ejbca.git
+[submodule "submitter"]
+	path = submitter
+	url = git@github.com:herpiko/sawtooth-evote-submitter.git
