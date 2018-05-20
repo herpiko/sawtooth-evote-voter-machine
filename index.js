@@ -5,6 +5,7 @@ const {spawnSync} = require('child_process');
 const forge = require('node-forge');
 const pki = forge.pki;
 const base64 = require('js-base64').Base64;
+const voteSubmitter = require('./submitter/vote');
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const candidates = JSON.parse(fs.readFileSync('candidates.json', 'utf8'));
@@ -132,5 +133,13 @@ prompt.get(schema, (err, result) => {
     let payload = {};
     payload[idv] = pem;
     console.log('\nPayload : ' + JSON.stringify(payload));
+    voteSubmitter(process.argv[2], idv.substr(0, 20), pem)
+    .then((result) => {
+      console.log(result);
+    })
+    .catch((err) => {
+      console.log(err);
+    })
+
   });
 });
