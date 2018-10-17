@@ -11,13 +11,13 @@ const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const candidates = JSON.parse(fs.readFileSync('candidates.json', 'utf8'));
 
 // TPS key pair
-const certPem = fs.readFileSync('certs/tps/tps_527105_001.pem', 'utf8');
+const certPem = fs.readFileSync('certs/KPU_Machines/TPS/527105_001/tps_527105_001.pem', 'utf8');
 const tpsCert = pki.certificateFromPem(certPem);
-const keyPem = fs.readFileSync('certs/tps/tps_527105_001.plain.key', 'utf8');
+const keyPem = fs.readFileSync('certs/KPU_Machines/TPS/527105_001/tps_527105_001.plain.key', 'utf8');
 const tpsKey = pki.privateKeyFromPem(keyPem);
 
 // Kunci Suara
-const kunciSuaraPem = fs.readFileSync('certs/kpu-tallyer/kunci_suara.pem', 'utf8');
+const kunciSuaraPem = fs.readFileSync('certs/KPU_Machines/KunciSuara/kunci_suara.pem', 'utf8');
 const kunciSuara = pki.certificateFromPem(kunciSuaraPem);
 
 prompt.start();
@@ -26,12 +26,12 @@ const schema = {
     cert : {
       message : 'Cert path',
       required : true,
-      default : 'certs/dpt/herpiko_52710501019120001.pem'
+      default : 'certs/Dukcapil_DPT/52710501019120001_herpiko_dwi_aguno.pem'
     },
     key : {
       message : 'Key path',
       required : true,
-      default : 'certs/dpt/herpiko_52710501019120001.plain.key'
+      default : 'certs/Dukcapil_DPT/52710501019120001_herpiko_dwi_aguno.plain.key'
     },
   }
 }
@@ -54,8 +54,8 @@ prompt.get(schema, (err, result) => {
   console.log("=====================================\n");
 
   // Verify eKTP cert
-  const rootCA = pki.certificateFromPem(fs.readFileSync('certs/ca/KominfoRootCA.pem', 'utf8'));
-  const dukcapilCA = pki.certificateFromPem(fs.readFileSync('certs/ca/DukcapilIntermediateCA.pem', 'utf8'));
+  const rootCA = pki.certificateFromPem(fs.readFileSync('certs/CA/KominfoRootCA.pem', 'utf8'));
+  const dukcapilCA = pki.certificateFromPem(fs.readFileSync('certs/CA/DukcapilIntermediateCA.pem', 'utf8'));
   console.log('Verifying cert against CA...');
   try {
     const verified = dukcapilCA.verify(voterCert)
@@ -67,10 +67,12 @@ prompt.get(schema, (err, result) => {
 
   // Verify against CRL
   console.log('Verifying cert against CRL...');
-  let spawned = spawnSync('openssl', ['verify',  '-crl_check', '-CAfile', 'certs/ca/DukcapilIntermediateCA.crl-chain.pem', result.cert]);
+  let spawned = spawnSync('openssl', ['verify',  '-crl_check', '-CAfile', 'certs/CA/DukcapilIntermediateCA-crl-chain.pem', result.cert]);
   let crlCheckResult = spawned.stdout.toString().indexOf('OK') > -1
   console.log(crlCheckResult ? '- Verified\n' : '- Not verified / revoked');
-  if (!crlCheckResult) return;
+  if (!crlCheckResult) {
+    return;
+  }
 
   // TODO Check against DPT
   //
@@ -97,6 +99,7 @@ prompt.get(schema, (err, result) => {
       console.log(vote + ' is not a valid candidate');
       process.exit(1);
     }
+
     let u = (new Date()).valueOf();
     u = createHash('sha256').update(u.toString()).digest('hex');
     var idv = createHash('sha256').update(u + UID).digest('hex');
