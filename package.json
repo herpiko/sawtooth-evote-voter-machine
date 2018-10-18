@@ -9,6 +9,7 @@
   "author": "Herpiko Dwi Aguno <herpiko@gmail.com>",
   "license": "MIT",
   "dependencies": {
+    "cbor": "^4.1.1",
     "js-base64": "^2.4.3",
     "node-forge": "^0.7.5",
     "pbkdf2": "^3.0.17",

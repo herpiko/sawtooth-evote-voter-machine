@@ -3,15 +3,16 @@ const prompt = require('prompt');
 const {createHash} = require('crypto')
 const {spawnSync} = require('child_process');
 const forge = require('node-forge');
+const cbor = require('cbor')
 const pbkdf2 = require('pbkdf2');
 const request = require('request');
 const pki = forge.pki;
 const base64 = require('js-base64').Base64;
 const voteSubmitter = require('../sawtooth-evote-submitter/vote');
-const targetHost = process.argv[2] || '172.30.0.211:22311'
+const targetDPTHost = process.argv[2] || '172.30.0.111:21311'
+const targetVoteHost = process.argv[2] || '172.30.0.211:22311'
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-const candidates = JSON.parse(fs.readFileSync('candidates.json', 'utf8'));
 
 // TPS key pair
 const certPem = fs.readFileSync('../sawtooth-evote-ejbca/KPU_Machines/TPS/527105_001/tps_527105_001.pem', 'utf8');
@@ -86,78 +87,99 @@ prompt.get(schema, (err, result) => {
     return;
   }
 
-  // TODO Check the voter id against local DPT ledger
-
-  // TODO Fetch candidats from local DPT ledger
-  var candidatesPrompt = '\nCandidates : ';
-  for (var i in candidates) {
-    candidatesPrompt += '\n - ' + candidates[i].name;
-  }
-  candidatesPrompt += '\nPlease pick by number';
-  const voteSchema = {
-    properties : {
-      vote : {
-        message : candidatesPrompt,
-        required : true,
-        default : 2
-      },
-    }
-  }
-  candidatesPrompt += '\n\nPlease vote (enter number)';
-  prompt.get(voteSchema, (err, result) => {
-
-    const vote = parseInt(result.vote);
-    if (vote < 0 || vote > candidates.length) {
-      console.log(vote + ' is not a valid candidate');
-      process.exit(1);
+  // Check the voter id against local DPT ledger. The state should be ready, otherwise, abort.
+  let familyName = 'localDPT';
+  let nameHash = createHash('sha256').update(commonName).digest('hex')
+  let payloadNameHash = createHash('sha512').update(nameHash).digest('hex');
+  let familyNameHash = createHash('sha512').update(familyName).digest('hex');
+  let stateId = familyNameHash.substr(0, 6) + payloadNameHash.substr(-64);
+  request.get('http://' + targetDPTHost + '/state/' + stateId, (err, res) => {
+    let buf = Buffer.from(JSON.parse(res.body).data, 'base64');
+    let decoded = cbor.decode(buf);
+    let keys = Object.keys(decoded);
+    if (decoded[keys[0]] !== 'ready') {
+      console.log('VoterID is NOT READY to vote. Aborted.');
+      return;
     }
 
-    const idv = pbkdf2.pbkdf2Sync(kValue, commonName, 1, 32, 'sha512').toString('base64') + kValue.substr(45);
-    console.log(`\nYour k : ${kValue}`);
-    console.log(`\nYour idv : ${idv}`);
-
-    p7 = forge.pkcs7.createEnvelopedData();
-    p7.addRecipient(kunciSuara);
-    p7.content = forge.util.createBuffer(vote);
-    p7.encrypt();
-    let bailout = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
-
-    var p7 = forge.pkcs7.createSignedData();
-    p7.content = forge.util.createBuffer(bailout);
-    p7.addCertificate(tpsCert);
-    p7.addSigner({
-      key: tpsKey,
-      certificate: tpsCert,
-      digestAlgorithm: forge.pki.oids.sha256,
-      authenticatedAttributes: [{
-        type: forge.pki.oids.contentType,
-        value: forge.pki.oids.data,
-      },
-      {
-        type: forge.pki.oids.messageDigest
-      },
-      {
-        type: forge.pki.oids.signingTime,
-        value: new Date()
+    // Fetch candidats from local DPT ledger
+    let familyName = 'candidates';
+    let payloadNameHash = createHash('sha512').update('candidates').digest('hex');
+    let familyNameHash = createHash('sha512').update(familyName).digest('hex');
+    let stateId = familyNameHash.substr(0, 6) + payloadNameHash.substr(-64);
+    request.get('http://' + targetDPTHost + '/state/' + stateId, (err, res) => {
+      let buf = Buffer.from(JSON.parse(res.body).data, 'base64');
+      let decoded = cbor.decode(buf);
+      let candidates = JSON.parse(base64.decode(decoded.candidates));
+      var candidatesPrompt = '\nCandidates : ';
+      for (var i in candidates) {
+        candidatesPrompt += '\n - ' + candidates[i].name;
       }
-      ]
-    });
-    p7.sign();
-    var pem = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
-    let payload = {};
-    payload[idv] = pem;
-    console.log('\nPayload : ' + JSON.stringify(payload));
-    voteSubmitter(targetHost, idv.substr(0, 20), pem)
-    .then((result) => {
-      setTimeout(() => {
-        request.get(JSON.parse(result).link, (err, res) => {
-          console.log(res.body);
+      candidatesPrompt += '\nPlease pick by number';
+      const voteSchema = {
+        properties : {
+          vote : {
+            message : candidatesPrompt,
+            required : true,
+          },
+        }
+      }
+      candidatesPrompt += '\n\nPlease vote (enter number)';
+      prompt.get(voteSchema, (err, result) => {
+    
+        const vote = parseInt(result.vote);
+        if (vote < 0 || vote > candidates.length) {
+          console.log(vote + ' is not a valid candidate');
+          process.exit(1);
+        }
+    
+        const idv = pbkdf2.pbkdf2Sync(kValue, commonName, 1, 32, 'sha512').toString('base64') + kValue.substr(45);
+        console.log(`\nYour k : ${kValue}`);
+        console.log(`\nYour idv : ${idv}`);
+    
+        p7 = forge.pkcs7.createEnvelopedData();
+        p7.addRecipient(kunciSuara);
+        p7.content = forge.util.createBuffer(vote);
+        p7.encrypt();
+        let bailout = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+    
+        var p7 = forge.pkcs7.createSignedData();
+        p7.content = forge.util.createBuffer(bailout);
+        p7.addCertificate(tpsCert);
+        p7.addSigner({
+          key: tpsKey,
+          certificate: tpsCert,
+          digestAlgorithm: forge.pki.oids.sha256,
+          authenticatedAttributes: [{
+            type: forge.pki.oids.contentType,
+            value: forge.pki.oids.data,
+          },
+          {
+            type: forge.pki.oids.messageDigest
+          },
+          {
+            type: forge.pki.oids.signingTime,
+            value: new Date()
+          }
+          ]
         });
-      }, 1000)
-    })
-    .catch((err) => {
-      console.log(err);
-    })
-
+        p7.sign();
+        var pem = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+        let payload = {};
+        payload[idv] = pem;
+        console.log('\nPayload : ' + JSON.stringify(payload));
+        voteSubmitter(targetVoteHost, idv.substr(0, 20), pem)
+        .then((result) => {
+          setTimeout(() => {
+            request.get(JSON.parse(result).link, (err, res) => {
+              console.log(res.body);
+            });
+          }, 1000)
+        })
+        .catch((err) => {
+          console.log(err);
+        })
+      });
+    });
   });
 });
