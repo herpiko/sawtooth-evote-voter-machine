@@ -11,6 +11,8 @@
   "dependencies": {
     "js-base64": "^2.4.3",
     "node-forge": "^0.7.5",
-    "prompt": "^1.0.0"
+    "pbkdf2": "^3.0.17",
+    "prompt": "^1.0.0",
+    "request": "^2.88.0"
   }
 }
