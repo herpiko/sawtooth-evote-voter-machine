@@ -4,12 +4,23 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "vote": "node vote.js",
+    "monitor-tps1": "node monitor.js 172.30.0.111:21311 172.30.0.211:22311",
+    "tallyer": "node tallyer.js",
+    "submit": "node submit.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Herpiko Dwi Aguno <herpiko@gmail.com>",
   "license": "MIT",
   "dependencies": {
+    "aes256": "^1.0.4",
+    "arraybuffer-to-buffer": "0.0.5",
+    "atob": "^2.1.2",
+    "body-parser": "^1.18.3",
     "cbor": "^4.1.1",
+    "ed25519": "0.0.4",
+    "express": "^4.16.4",
+    "hash.js": "^1.1.5",
     "js-base64": "^2.4.3",
     "node-forge": "^0.7.5",
     "pbkdf2": "^3.0.17",
