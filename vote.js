@@ -37,12 +37,12 @@ const schema = {
     cert : {
       message : 'Cert path',
       required : true,
-      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/52710501019120001_herpiko_dwi_aguno.pem'
+      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/herpiko_dwi_aguno.pem'
     },
     key : {
       message : 'Key path',
       required : true,
-      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/52710501019120001_herpiko_dwi_aguno.plain.key'
+      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/herpiko_dwi_aguno.plain.key'
     },
     kValue : {
       message : 'k Value',
@@ -120,6 +120,7 @@ prompt.get(schema, (err, result) => {
     let decoded = cbor.decode(buf);
     let keys = Object.keys(decoded);
     if (decoded[keys[0]] !== 'ready') {
+      console.log(decoded[keys[0]]);
       console.log('VoterID is NOT READY to vote. Aborted.');
       return;
     }
@@ -130,9 +131,6 @@ prompt.get(schema, (err, result) => {
     let signatureAb = base64ToArrayBuffer(kValue.split('_')[2]);
     let signature = arrayBufferToBuffer(signatureAb);
     let msg = new Buffer(kValue.split('_')[1]);
-    console.log(kValue.split('_')[1])
-    console.log(msg)
-    console.log(signature)
     try {
       if (!ed25519.Verify(msg, signature, p)) {
         console.log('K value signature is not verified. Aborted.');
@@ -141,9 +139,12 @@ prompt.get(schema, (err, result) => {
     } catch(e) {
       console.log(e);
       console.log('K value signature is not verified. Aborted.');
-      console.log(msg.length);
-      console.log(signature.length);
-      console.log(p.length);
+      return;
+    }
+    // Check the k value aginst voter identity
+    const x = pbkdf2.pbkdf2Sync(kValue.split('_')[0], commonName, 1, 32, 'sha512').toString('base64');
+    if (x !== kValue.split('_')[1]) {
+      console.log('This is not your k value. Aborted.');
       return;
     }
 
@@ -281,7 +282,11 @@ prompt.get(schema, (err, result) => {
           setTimeout(() => {
             request.get(JSON.parse(result).link, (err, res) => {
               console.log(res.body);
-
+              let body = JSON.parse(res.body)
+              if (body && body.data[0] && body.data[0].invalid_transactions && body.data[0].invalid_transactions.length > 0) {
+                console.log(body.data[0].invalid_transactions[0]);
+                return; 
+              }
 
               let payload = {};
               payload[idm] = q
