@@ -1,4 +1,5 @@
 const fs = require('fs');
+const pg = require('pg');
 const prompt = require('prompt');
 const {createHash} = require('crypto')
 const {spawnSync} = require('child_process');
@@ -20,6 +21,14 @@ const publicKey = '0c32c468980d40237f4e44a66dec3beb564b3e1394a4c6df1da2065e3afc1
 const p = new Buffer(publicKey, 'hex');
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+
+const pgclient = new pg.Client({
+  user: 'root',
+  host: 'localhost',
+  database: 'dpt',
+  port:23111,
+});
+pgclient.connect();
 
 // TPS key pair
 const certPem = fs.readFileSync('../sawtooth-evote-ejbca/KPU_Machines/TPS/527105_001/tps_527105_001.pem', 'utf8');
@@ -291,6 +300,7 @@ prompt.get(schema, (err, result) => {
               let payload = {};
               payload[idm] = q
               console.log('\nPayload : ' + JSON.stringify(payload));
+              /* localDPT no longer receive payload
               tpsSubmitter(targetDPTHost, 'localDPT', idm.substr(0, 20), base64.encode(JSON.stringify(payload)))
               .then((result) => {
                 setTimeout(() => {
@@ -302,11 +312,20 @@ prompt.get(schema, (err, result) => {
               .catch((err) => {
                 console.log(err);
               })
+              */
+							const query = 'INSERT INTO dpt (key, value) values ($1, $2);';
+              const values = [idm.substr(0, 20), base64.encode(JSON.stringify(payload))];
+              pgclient.query(query, values, (err, res) => {
+                console.log(err);
+                console.log(res);
+                process.exit();
+              });
             });
           }, 2000)
         })
         .catch((err) => {
           console.log(err);
+          process.exit();
         })
       });
     });
