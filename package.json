@@ -6,7 +6,7 @@
   "scripts": {
     "vote": "node vote.js",
     "monitor-tps1": "node monitor.js 172.30.0.111:21311 172.30.0.211:22311",
-    "tallyer": "node tallyer.js",
+    "tallyer-tps1": "node tallyer.js 172.30.0.211:22311 172.20.1.52:12352",
     "submit": "node submit.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
