@@ -110,6 +110,8 @@ prompt.get(schema, (err, result) => {
   let crlCheckResult = spawned.stdout.toString().indexOf('OK') > -1
   console.log(crlCheckResult ? '- Verified\n' : '- Not verified / revoked');
   if (!crlCheckResult) {
+    console.log(spawned.stdout.toString());
+    console.log(spawned.stderr.toString());
     return;
   }
 
@@ -224,15 +226,38 @@ prompt.get(schema, (err, result) => {
         var z = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
         // Now we have z value
 
+
+        // Sign the encrypted bailout using voter's key
+        var p7 = forge.pkcs7.createSignedData();
+        p7.content = forge.util.createBuffer(vote);
+        p7.addCertificate(tpsCert);
+        p7.addSigner({
+          key: voterKey,
+          certificate: tpsCert,
+          digestAlgorithm: forge.pki.oids.sha256,
+          authenticatedAttributes: [{
+            type: forge.pki.oids.contentType,
+            value: forge.pki.oids.data,
+          },
+          {
+            type: forge.pki.oids.messageDigest
+          },
+          {
+            type: forge.pki.oids.signingTime,
+            value: new Date()
+          }
+          ]
+        });
+        p7.sign();
+        var o = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+
         // Encrypt the bailout using k value
-        var o = aes256.encrypt(kValue,''+vote)
-        console.log
+        var n = aes256.encrypt(kValue,''+o)
 
         // Now we have a complete secured bailout        
         let payload = {};
-        payload[idv] = {z:z,o:o}
+        payload[idv] = {z:z,n:n}
         console.log('\nPayload : ' + JSON.stringify(payload));
-
 
         // It's time to mark the voter as already vote. Create the payload first.
         let machineCommonName
@@ -297,6 +322,7 @@ prompt.get(schema, (err, result) => {
                 return; 
               }
 
+              // Submit it to cockroach db cluster
               let payload = {};
               payload[idm] = q
               console.log('\nPayload : ' + JSON.stringify(payload));
