@@ -14,9 +14,9 @@ const pki = forge.pki;
 const base64 = require('js-base64').Base64;
 const arrayBufferToBuffer = require('arraybuffer-to-buffer')
 const tpsSubmitter = require('../sawtooth-evote-submitter/tps-submitter');
-const targetDPTHost = process.argv[2] || '172.30.0.111:21311'
+const targetDPTHost = process.argv[3] || '172.30.0.111:21311'
 const atob = require('atob');
-const targetVoteHost = process.argv[2] || '172.30.0.211:22311'
+const targetVoteHost = process.argv[3] || '172.30.0.211:22311'
 const publicKey = '0c32c468980d40237f4e44a66dec3beb564b3e1394a4c6df1da2065e3afc1d81';
 const p = new Buffer(publicKey, 'hex');
 
@@ -26,7 +26,7 @@ const pgclient = new pg.Client({
   user: 'root',
   host: 'localhost',
   database: 'dpt',
-  port:23111,
+  port: 23111,
 });
 pgclient.connect();
 
@@ -39,32 +39,34 @@ const tpsKey = pki.privateKeyFromPem(keyPem);
 // Kunci Suara
 const kunciSuaraPem = fs.readFileSync('../sawtooth-evote-ejbca/KPU_Machines/KunciSuara/kunci_suara.pem', 'utf8');
 const kunciSuara = pki.certificateFromPem(kunciSuaraPem);
+const kunciSuaraPKPem = fs.readFileSync('../sawtooth-evote-ejbca/KPU_Machines/KunciSuara/kunci_suara.plain.key', 'utf8');
+const kunciSuaraPK = pki.certificateFromPem(kunciSuaraPem);
 
 prompt.start();
 const schema = {
-  properties : {
-    cert : {
-      message : 'Cert path',
-      required : true,
-      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/herpiko_dwi_aguno.pem'
+  properties: {
+    cert: {
+      message: 'Cert path',
+      required: true,
+      default: '../sawtooth-evote-ejbca/Dukcapil_DPT/' + (process.argv[2] === 'saeful' ? 'saeful_bahri.pem' : process.argv[2] === 'ayu' ? 'ayu_septiani.pem' : 'herpiko_dwi_aguno.pem')
     },
-    key : {
-      message : 'Key path',
-      required : true,
-      default : '../sawtooth-evote-ejbca/Dukcapil_DPT/herpiko_dwi_aguno.plain.key'
+    key: {
+      message: 'Key path',
+      required: true,
+      default: '../sawtooth-evote-ejbca/Dukcapil_DPT/' + (process.argv[2] === 'saeful' ? 'saeful_bahri.plain.key' : process.argv[2] === 'ayu' ? 'ayu_septiani.plain.key' : 'herpiko_dwi_aguno.plain.key')
     },
-    kValue : {
-      message : 'k Value',
-      required : true,
+    kValue: {
+      message: 'k Value',
+      required: true,
     },
   }
 }
 
 function base64ToArrayBuffer(base64) {
-  var binary_string =  atob(base64);
+  var binary_string = atob(base64);
   var len = binary_string.length;
-  var bytes = new Uint8Array( len );
-  for (var i = 0; i < len; i++)        {
+  var bytes = new Uint8Array(len);
+  for (var i = 0; i < len; i++) {
     bytes[i] = binary_string.charCodeAt(i);
   }
   return bytes.buffer;
@@ -99,14 +101,14 @@ prompt.get(schema, (err, result) => {
   try {
     const verified = dukcapilCA.verify(voterCert)
     console.log('- Verified');
-  } catch (e) {
+  } catch ( e ) {
     console.log('\nError : eKTP is not verified');
     return;
   }
 
   // Verify against CRL
   console.log('Verifying cert against CRL...');
-  let spawned = spawnSync('openssl', ['verify',  '-crl_check', '-CAfile', '../sawtooth-evote-ejbca/CA/DukcapilIntermediateCA-crl-chain.pem', result.cert]);
+  let spawned = spawnSync('openssl', ['verify', '-crl_check', '-CAfile', '../sawtooth-evote-ejbca/CA/DukcapilIntermediateCA-crl-chain.pem', result.cert]);
   let crlCheckResult = spawned.stdout.toString().indexOf('OK') > -1
   console.log(crlCheckResult ? '- Verified\n' : '- Not verified / revoked');
   if (!crlCheckResult) {
@@ -147,7 +149,7 @@ prompt.get(schema, (err, result) => {
         console.log('K value signature is not verified. Aborted.');
         return;
       }
-    } catch(e) {
+    } catch ( e ) {
       console.log(e);
       console.log('K value signature is not verified. Aborted.');
       return;
@@ -174,16 +176,16 @@ prompt.get(schema, (err, result) => {
       }
       candidatesPrompt += '\nPlease pick by number';
       const voteSchema = {
-        properties : {
-          vote : {
-            message : candidatesPrompt,
-            required : true,
+        properties: {
+          vote: {
+            message: candidatesPrompt,
+            required: true,
           },
         }
       }
       candidatesPrompt += '\n\nPlease vote (enter number)';
       prompt.get(voteSchema, (err, result) => {
-    
+
         const vote = parseInt(result.vote); // c value represented by this vote variable
         if (vote < 0 || vote > candidates.length) {
           console.log(vote + ' is not a valid candidate');
@@ -191,19 +193,28 @@ prompt.get(schema, (err, result) => {
         }
         // Generate idv from kdf k (NIK) 
         const idv = pbkdf2.pbkdf2Sync(kValue, commonName, 1, 32, 'sha512').toString('base64') + kValue.substr(45);
-        console.log(`\nYour k : ${kValue}`);
-        console.log(`\nYour idv : ${idv}`);
-   
+        console.log(`
+Your k : ${kValue}`);
+        console.log(`
+Your idv : ${idv}`);
+
         // Encrypt the bailout value using Kunci Suara 
-        p7 = forge.pkcs7.createEnvelopedData();
+        var p7 = forge.pkcs7.createEnvelopedData();
         p7.addRecipient(kunciSuara);
-        p7.content = forge.util.createBuffer(vote);
+        p7.content = forge.util.createBuffer(vote.toString());
         p7.encrypt();
-        let bailout = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
-   
+        try {
+          p7.decrypt(p7.recipients[i], kunciSuaraPK)
+        } catch(e) {
+          console.log(e);
+          process.exit();
+        }
+        let z = forge.pkcs7.messageToPem(p7);
+        //replace(/\r?\n|\r/g, '').split('-----')[2];
+
         // Sign the encrypted bailout using MesinPemilih's key 
         var p7 = forge.pkcs7.createSignedData();
-        p7.content = forge.util.createBuffer(bailout);
+        p7.content = forge.util.createBuffer(z);
         p7.addCertificate(tpsCert);
         p7.addSigner({
           key: tpsKey,
@@ -213,23 +224,23 @@ prompt.get(schema, (err, result) => {
             type: forge.pki.oids.contentType,
             value: forge.pki.oids.data,
           },
-          {
-            type: forge.pki.oids.messageDigest
-          },
-          {
-            type: forge.pki.oids.signingTime,
-            value: new Date()
-          }
+            {
+              type: forge.pki.oids.messageDigest
+            },
+            {
+              type: forge.pki.oids.signingTime,
+              value: new Date()
+            }
           ]
         });
-        p7.sign();
-        var z = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+        p7.sign({detached:true});
+        var zs = forge.pkcs7.messageToPem(p7);//.replace(/\r?\n|\r/g, '').split('-----')[2];
         // Now we have z value
 
 
         // Sign the encrypted bailout using voter's key
         var p7 = forge.pkcs7.createSignedData();
-        p7.content = forge.util.createBuffer(vote);
+        p7.content = forge.util.createBuffer(vote.toString());
         p7.addCertificate(tpsCert);
         p7.addSigner({
           key: voterKey,
@@ -239,24 +250,29 @@ prompt.get(schema, (err, result) => {
             type: forge.pki.oids.contentType,
             value: forge.pki.oids.data,
           },
-          {
-            type: forge.pki.oids.messageDigest
-          },
-          {
-            type: forge.pki.oids.signingTime,
-            value: new Date()
-          }
+            {
+              type: forge.pki.oids.messageDigest
+            },
+            {
+              type: forge.pki.oids.signingTime,
+              value: new Date()
+            }
           ]
         });
-        p7.sign();
-        var o = forge.pkcs7.messageToPem(p7).replace(/\r?\n|\r/g, '').split('-----')[2];
+        p7.sign({detached:true});
+        var o = forge.pkcs7.messageToPem(p7);
 
         // Encrypt the bailout using k value
-        var n = aes256.encrypt(kValue,''+o)
+        let nObj = { vote : vote.toString(), signature: o }
+        var n = aes256.encrypt(kValue, JSON.stringify(nObj))
 
         // Now we have a complete secured bailout        
         let payload = {};
-        payload[idv] = {z:z,n:n}
+        payload[idv] = {
+          z: z, // this is for KPU
+          zs: zs, // the signature of z by tps key
+          n: n // this is for user to verify in the future
+        }
         console.log('\nPayload : ' + JSON.stringify(payload));
 
         // It's time to mark the voter as already vote. Create the payload first.
@@ -271,7 +287,7 @@ prompt.get(schema, (err, result) => {
 
         let a = hash.sha256().update(commonName).digest('hex');
         var p7 = forge.pkcs7.createSignedData();
-        p7.content = forge.util.createBuffer(bailout);
+        p7.content = forge.util.createBuffer(z);
         p7.addCertificate(tpsCert);
         p7.addSigner({
           key: tpsKey,
@@ -281,15 +297,15 @@ prompt.get(schema, (err, result) => {
             type: forge.pki.oids.contentType,
             value: forge.pki.oids.data,
           },
-          {
-            type: forge.pki.oids.messageDigest
-          },
-          {
-            type: forge.pki.oids.signingTime,
-            value: new Date()
-          }
+            {
+              type: forge.pki.oids.messageDigest
+            },
+            {
+              type: forge.pki.oids.signingTime,
+              value: new Date()
+            }
           ]
-        },{
+        }, {
           key: voterKey,
           certificate: voterCert,
           digestAlgorithm: forge.pki.oids.sha256,
@@ -297,13 +313,13 @@ prompt.get(schema, (err, result) => {
             type: forge.pki.oids.contentType,
             value: forge.pki.oids.data,
           },
-          {
-            type: forge.pki.oids.messageDigest
-          },
-          {
-            type: forge.pki.oids.signingTime,
-            value: new Date()
-          }
+            {
+              type: forge.pki.oids.messageDigest
+            },
+            {
+              type: forge.pki.oids.signingTime,
+              value: new Date()
+            }
           ]
         });
         p7.sign();
@@ -312,47 +328,48 @@ prompt.get(schema, (err, result) => {
 
         // Submit it to local voter ledger
         tpsSubmitter(targetVoteHost, 'localVote', idv.substr(0, 20), base64.encode(JSON.stringify(payload)))
-        .then((result) => {
-          setTimeout(() => {
-            request.get(JSON.parse(result).link, (err, res) => {
-              console.log(res.body);
-              let body = JSON.parse(res.body)
-              if (body && body.data[0] && body.data[0].invalid_transactions && body.data[0].invalid_transactions.length > 0) {
-                console.log(body.data[0].invalid_transactions[0]);
-                return; 
-              }
+          .then((result) => {
+            setTimeout(() => {
+              request.get(JSON.parse(result).link, (err, res) => {
+                console.log(res.body);
+                let body = JSON.parse(res.body)
+                if (body && body.data[0] && body.data[0].invalid_transactions && body.data[0].invalid_transactions.length > 0) {
+                  console.log(body.data[0].invalid_transactions[0]);
+                  return;
+                }
 
-              // Submit it to cockroach db cluster
-              let payload = {};
-              payload[idm] = q
-              console.log('\nPayload : ' + JSON.stringify(payload));
-              /* localDPT no longer receive payload
-              tpsSubmitter(targetDPTHost, 'localDPT', idm.substr(0, 20), base64.encode(JSON.stringify(payload)))
-              .then((result) => {
-                setTimeout(() => {
-                  request.get(JSON.parse(result).link, (err, res) => {
-                    console.log(res.body);
-                  });
-                }, 2000)
-              })
-              .catch((err) => {
-                console.log(err);
-              })
-              */
-							const query = 'INSERT INTO dpt (key, value) values ($1, $2);';
-              const values = [idm.substr(0, 20), base64.encode(JSON.stringify(payload))];
-              pgclient.query(query, values, (err, res) => {
-                console.log(err);
-                console.log(res);
-                process.exit();
+                // Submit it to cockroach db cluster
+                let payload = {};
+                payload[idm] = q;
+                payload['commonName'] = commonName;
+                console.log('\nPayload : ' + JSON.stringify(payload));
+                /* localDPT no longer receive payload
+                tpsSubmitter(targetDPTHost, 'localDPT', idm.substr(0, 20), base64.encode(JSON.stringify(payload)))
+                .then((result) => {
+                  setTimeout(() => {
+                    request.get(JSON.parse(result).link, (err, res) => {
+                      console.log(res.body);
+                    });
+                  }, 2000)
+                })
+                .catch((err) => {
+                  console.log(err);
+                })
+                */
+                const query = 'INSERT INTO dpt (key, value) values ($1, $2);';
+                const values = [idm.substr(0, 20), base64.encode(JSON.stringify(payload))];
+                pgclient.query(query, values, (err, res) => {
+                  console.log(err);
+                  console.log(res);
+                  process.exit();
+                });
               });
-            });
-          }, 2000)
-        })
-        .catch((err) => {
-          console.log(err);
-          process.exit();
-        })
+            }, 2000)
+          })
+          .catch((err) => {
+            console.log(err);
+            process.exit();
+          })
       });
     });
   });

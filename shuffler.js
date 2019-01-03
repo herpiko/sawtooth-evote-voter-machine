@@ -5,19 +5,21 @@ const pgclient = new pg.Client({
   user: 'root',
   host: 'tps-1-db-1.skripsi.local',
   database: 'dpt',
-  port:26257,
+  port: 26257,
 });
 pgclient.connect();
 
-const query = 'SELECT * FROM dpt;';
+const query = 'SELECT * FROM dpt ORDER BY id ASC;';
 setInterval(() => {
   pgclient.query(query, (err, res) => {
     if (err) {
-  	  console.log(err);
-  		process.exit();
-  	}
+      console.log(err);
+      process.exit();
+    }
     let rows = res.rows;
-    if (rows.length < 1) return;
+    if (rows.length < 1) {
+      return;
+    }
     let ids = [];
     for (let i in rows) {
       ids.push(rows[i].id);
@@ -42,6 +44,6 @@ setInterval(() => {
       console.log('randomized:');
       console.log(rows);
     });
-   
+
   });
 }, 1000);

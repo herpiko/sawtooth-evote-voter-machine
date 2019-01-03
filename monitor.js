@@ -11,11 +11,17 @@ const port = process.env.PORT || 3333
 const dptNode = process.argv[2];
 const voteNode = process.argv[3];
 const https = require('https');
-if (!dptNode) throw("Please specify the node (node index host:port)");
-if (!voteNode) throw("Please specify the node (node index host:port)");
+if (!dptNode) {
+  throw ("Please specify the node (node index host:port)");
+}
+if (!voteNode) {
+  throw ("Please specify the node (node index host:port)");
+}
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended:true}));
+app.use(bodyParser.urlencoded({
+  extended: true
+}));
 
 // TODO mutual auth
 
@@ -24,18 +30,22 @@ const dump = (node, filter) => {
     // In real world, this handled by dedicated driver
     // See : https://sawtooth.hyperledger.org/docs/core/releases/1.0/app_developers_guide/event_subscriptions.html
     let obj = {
-      data : [],
-      total : 0,
+      data: [],
+      total: 0,
     }
     let next = true;
     let promises = [];
     let nextUrl;
-  
+
     var get = (next) => {
       let uri = next || 'http://' + node + '/transactions?limit=100';
       console.log('Fetching ' + uri);
-      request.get({uri: uri}, (err, resp) => {
-        if (err) return reject(err);
+      request.get({
+        uri: uri
+      }, (err, resp) => {
+        if (err) {
+          return reject(err);
+        }
         let body = JSON.parse(resp.body);
         if (body.data && body.data.length > 0) {
           obj.total += body.data.length;
@@ -75,21 +85,21 @@ app.get('/', (req, res) => {
   let VoteTXs
   console.log('ok')
   dump(dptNode)
-  .then((result) => {
-    DPTTXs = result;
-    return dump(voteNode)
-  })
-  .then((result) => {
-    VoteTXs = result;
-    for (let i in VoteTXs.data) {
-      delete(VoteTXs.data[i].state);
-      delete(VoteTXs.data[i].familyName);
-    }
-    res.send(VoteTXs);
-  })
-  .catch((err) => {
-    res.send(err);
-  });
+    .then((result) => {
+      DPTTXs = result;
+      return dump(voteNode)
+    })
+    .then((result) => {
+      VoteTXs = result;
+      for (let i in VoteTXs.data) {
+        delete (VoteTXs.data[i].state);
+        delete (VoteTXs.data[i].familyName);
+      }
+      res.send(VoteTXs);
+    })
+    .catch((err) => {
+      res.send(err);
+    });
 
 /*
   let body = 'Evote<br/>local DPT ledger : ' + dptNode;
@@ -103,12 +113,20 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/verify/:id', (req, res) => { // Voter checking their commited bailoud
-  request.get({uri: 'http://' + voteNode + '/state/' + req.params.id}, (err, resp) => {
-    if (err) return res.send({error : err});
+  request.get({
+    uri: 'http://' + voteNode + '/state/' + req.params.id
+  }, (err, resp) => {
+    if (err) {
+      return res.send({
+        error: err
+      });
+    }
     let body = JSON.parse(resp.body);
     let data = body.data;
     if (!data) {
-      return res.send({status : 'NOT_EXISTS'});
+      return res.send({
+        status: 'NOT_EXISTS'
+      });
     }
     let buf = Buffer.from(data, 'base64');
     let decoded = cbor.decode(buf);
@@ -128,6 +146,6 @@ app.get('/api/verify/:id', (req, res) => { // Voter checking their commited bail
   });
 });
 
-app.listen(port, function(){
+app.listen(port, function() {
   console.log('Evote server started on port ' + port + ' against ledger ' + dptNode + ', ' + voteNode);
 })
